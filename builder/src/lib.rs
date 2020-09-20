@@ -58,6 +58,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     });
 
+    let builder_field_creation = fields.iter().map(|field| {
+        let name = &field
+            .ident
+            .as_ref()
+            .expect("named fields do not have identifier");
+        let error_msg = format!("field \"{}\" is None", name);
+        quote! {
+            #name: self.#name.clone().ok_or(#error_msg)?
+        }
+    });
+
     let expanded = quote! {
         pub struct #builder_indent {
             #(#optional_fields),*
@@ -73,6 +84,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         impl #builder_indent {
             #(#builder_field_setters)*
+
+            pub fn build(&mut self) -> std::result::Result<#indent, std::boxed::Box<dyn std::error::Error>> {
+                Ok(#indent {
+                    #(#builder_field_creation),*
+                })
+            }
         }
     };
     // eprintln!("TOKENS: {}", expanded);
