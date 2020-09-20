@@ -1,10 +1,81 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
+use quote::{format_ident, quote};
+use syn::{parse_macro_input, DeriveInput};
+
+macro_rules! span_compile_error {
+    ($ident:expr, $msg:expr) => {
+        syn::Error::new($ident.span(), $msg)
+            .to_compile_error()
+            .into()
+    };
+}
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
-    let _ = input;
+    let input = parse_macro_input!(input as DeriveInput);
 
-    unimplemented!()
+    // eprintln!("INPUT: {:#?}", input.clone());
+
+    let indent = &input.ident;
+    let builder_indent = format_ident!("{}Builder", indent);
+
+    let fields = &match input.data {
+        syn::Data::Struct(data_struct) => {
+            let struct_fields = data_struct.fields;
+            match struct_fields {
+                syn::Fields::Named(named_fields) => named_fields.named,
+                _ => return span_compile_error!(input.ident, "expected named fields"),
+            }
+        }
+        _ => return span_compile_error!(input.ident, "expected struct"),
+    };
+
+    let optional_fields = fields.iter().map(|field| {
+        let name = &field.ident;
+        let field_type = &field.ty;
+        quote! {
+            #name: std::option::Option<#field_type>
+        }
+    });
+
+    let builder_values = fields.iter().map(|field| {
+        let name = &field.ident;
+        quote! {
+            #name: None
+        }
+    });
+
+    let builder_field_setters = fields.iter().map(|field| {
+        let name = &field.ident;
+        let field_type = &field.ty;
+        quote! {
+            fn #name(&mut self, #name: #field_type) -> &mut Self {
+                self.#name = std::option::Option::Some(#name);
+                self
+            }
+        }
+    });
+
+    let expanded = quote! {
+        pub struct #builder_indent {
+            #(#optional_fields),*
+        }
+
+        impl #indent {
+            pub fn builder() -> #builder_indent {
+                #builder_indent {
+                    #(#builder_values),*
+                }
+            }
+        }
+
+        impl #builder_indent {
+            #(#builder_field_setters)*
+        }
+    };
+    // eprintln!("TOKENS: {}", expanded);
+
+    expanded.into()
 }
