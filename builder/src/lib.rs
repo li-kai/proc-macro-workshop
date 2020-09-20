@@ -18,8 +18,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     // eprintln!("INPUT: {:#?}", input.clone());
 
-    let indent = &input.ident;
-    let builder_indent = format_ident!("{}Builder", indent);
+    let ident = &input.ident;
+    let builder_ident = format_ident!("{}Builder", ident);
 
     let fields = &match input.data {
         syn::Data::Struct(data_struct) => {
@@ -87,23 +87,23 @@ pub fn derive(input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
-        pub struct #builder_indent {
+        pub struct #builder_ident {
             #(#optional_fields),*
         }
 
-        impl #indent {
-            pub fn builder() -> #builder_indent {
-                #builder_indent {
+        impl #ident {
+            pub fn builder() -> #builder_ident {
+                #builder_ident {
                     #(#builder_values),*
                 }
             }
         }
 
-        impl #builder_indent {
+        impl #builder_ident {
             #(#builder_field_setters)*
 
-            pub fn build(&mut self) -> std::result::Result<#indent, std::boxed::Box<dyn std::error::Error>> {
-                Ok(#indent {
+            pub fn build(&mut self) -> std::result::Result<#ident, std::boxed::Box<dyn std::error::Error>> {
+                Ok(#ident {
                     #(#builder_field_creation),*
                 })
             }
