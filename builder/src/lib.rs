@@ -33,8 +33,6 @@ impl syn::parse::Parse for ExpandToArg {
 pub fn derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    // eprintln!("INPUT: {:#?}", input.clone());
-
     let ident = &input.ident;
     let builder_ident = format_ident!("{}Builder", ident);
 
@@ -52,13 +50,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let optional_fields = fields.iter().map(|field| {
         let name = &field.ident;
         let field_type = &field.ty;
-        let normalized_field_type = get_optional_field_type(field_type).unwrap_or(field_type);
 
         if get_vec_field_type(field_type).is_some() {
             quote! {
                 #name: #field_type
             }
         } else {
+            let normalized_field_type = get_optional_field_type(field_type).unwrap_or(field_type);
+
             quote! {
                 #name: std::option::Option<#normalized_field_type>
             }
@@ -105,7 +104,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     format_ident!("{}", expand.name.value().trim_matches('"'))
                 }
                 Ok(expand) => {
-                    return span_compile_error!(expand.keyword, "expected `builder(each = \"...\")`");
+                    return span_compile_error!(
+                        expand.keyword,
+                        "expected `builder(each = \"...\")`"
+                    );
                 }
                 _ => return field_setter_fn,
             };
@@ -180,31 +182,19 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
     };
-    // eprintln!("TOKENS: {}", expanded);
 
     expanded.into()
 }
 
-fn get_optional_field_type(field_type: &syn::Type) -> Option<&syn::Type> {
+fn get_field_type<'ty>(field_type: &'ty syn::Type, ident_name: &'_ str) -> Option<&'ty syn::Type> {
     let path_segments = match field_type {
-        syn::Type::Path(syn::TypePath {
-            qself: None,
-            path:
-                syn::Path {
-                    leading_colon: None,
-                    segments,
-                },
-        }) => segments,
+        syn::Type::Path(syn::TypePath { qself: _, path }) => &path.segments,
         _ => return None,
     };
-    if path_segments.is_empty() {
-        return None;
-    }
-    let path_segment = &path_segments[0];
-
-    if path_segment.ident != "Option" {
-        return None;
-    }
+    let path_segment = match path_segments.first() {
+        Some(segment) if segment.ident == ident_name => segment,
+        _ => return None,
+    };
     let args = match &path_segment.arguments {
         syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
             colon2_token: None,
@@ -222,32 +212,10 @@ fn get_optional_field_type(field_type: &syn::Type) -> Option<&syn::Type> {
     }
 }
 
+fn get_optional_field_type(field_type: &syn::Type) -> Option<&syn::Type> {
+    get_field_type(field_type, "Option")
+}
+
 fn get_vec_field_type(field_type: &syn::Type) -> Option<&syn::Type> {
-    let path_segments = match field_type {
-        syn::Type::Path(syn::TypePath { qself: _, path }) => &path.segments,
-        _ => return None,
-    };
-    if path_segments.is_empty() {
-        return None;
-    }
-    let path_segment = &path_segments[0];
-
-    if path_segment.ident != "Vec" {
-        return None;
-    }
-    let args = match &path_segment.arguments {
-        syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-            colon2_token: None,
-            lt_token: _,
-            gt_token: _,
-            args,
-        }) => args,
-        _ => return None,
-    };
-
-    if let Some(syn::GenericArgument::Type(sub_field_type)) = args.first() {
-        Some(sub_field_type)
-    } else {
-        None
-    }
+    get_field_type(field_type, "Vec")
 }
