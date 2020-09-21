@@ -104,6 +104,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 Ok(expand) if expand.keyword == "each" => {
                     format_ident!("{}", expand.name.value().trim_matches('"'))
                 }
+                Ok(expand) => {
+                    return span_compile_error!(expand.keyword, "expected `builder(each = \"...\")`");
+                }
                 _ => return field_setter_fn,
             };
 
